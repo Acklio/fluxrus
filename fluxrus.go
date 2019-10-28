@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	influx "github.com/influxdata/influxdb/client/v2"
+	"github.com/sirupsen/logrus"
 )
 
 type InfluxHook struct {
@@ -28,6 +28,18 @@ func (h *InfluxHook) setError(e error) {
 	h.errLock.Lock()
 	h.err = e
 	h.errLock.Unlock()
+}
+
+func ensureDBExists(client influx.Client, db string) error {
+	response, err := client.Query(influx.Query{
+		Command:  fmt.Sprintf("CREATE DATABASE %s", db),
+		Database: db,
+	})
+	if err != nil {
+		return err
+	}
+
+	return response.Error()
 }
 
 func New(url, db, measurement string, opts ...Option) (*InfluxHook, error) {
@@ -56,6 +68,9 @@ func New(url, db, measurement string, opts ...Option) (*InfluxHook, error) {
 			return nil, err
 		}
 		hook.client = influxClient
+	}
+	if err := ensureDBExists(hook.client, db); err != nil {
+		return nil, err
 	}
 
 	hook.batchChan = make(chan *influx.Point, hook.batchSize)
